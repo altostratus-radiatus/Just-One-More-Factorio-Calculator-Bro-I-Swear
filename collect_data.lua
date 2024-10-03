@@ -1,16 +1,29 @@
+EXCLUDE_SCIENCE = {["example-science-pack"]=true}
+
 local default_zero = {
     __index = function(t, k) return 0 end
 }
+local total_lab_runtime = 0
 local total_remaining_science = {}
 setmetatable(total_remaining_science, default_zero)
 for _, tech in pairs(game.player.force.technologies) do
     if tech.enabled and not tech.researched then
+        local exclude = false
         for _, ingredient in pairs(tech.research_unit_ingredients) do
-            total_remaining_science[ingredient.name] = total_remaining_science[ingredient.name] + tech.research_unit_count * ingredient.amount
+            if EXCLUDE_SCIENCE[ingredient.name] then exclude = true break end
+        end
+        if not exclude then
+            for _, ingredient in pairs(tech.research_unit_ingredients) do
+                total_remaining_science[ingredient.name] = total_remaining_science[ingredient.name] + tech.research_unit_count * ingredient.amount
+                total_lab_runtime = total_lab_runtime + tech.research_unit_count * tech.research_unit_energy
+            end
         end
     end
 end
-game.write_file('technologies.json', game.table_to_json(total_remaining_science))
+local lab = game.get_filtered_entity_prototypes{{filter="name", name="lab"}}['lab']
+local lab_speed = game.player.force.laboratory_speed_modifier + lab.researching_speed
+total_lab_runtime = total_lab_runtime / 60 / lab_speed
+game.write_file('science.json', game.table_to_json({science=total_remaining_science, research_time=total_lab_runtime}))
 
 local modules = game.get_filtered_item_prototypes{{filter="type", type="module"}}
 local limitations_list = modules['productivity-module'].limitations

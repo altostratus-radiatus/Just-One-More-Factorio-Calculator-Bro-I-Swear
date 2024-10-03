@@ -2,7 +2,7 @@ import json
 import sys
 
 if __name__=="__main__":
-    with open('recipes.json') as f:
+    with open('recipes.json', 'r') as f:
         recipes = json.load(f)
     with open('solutions.json', 'r') as f:
         solution_values = json.load(f)

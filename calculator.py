@@ -25,6 +25,11 @@ PRODUCTIVITY_FOR_CATEGORY = {
     'mining': 0.5
 }
 
+VATBRAIN_CARTRIDGE = 'brain-cartridge-03'
+VATBRAIN_CARTRIDGES_PER_SECOND = 0.05
+NUMBER_OF_VATBRAINS_PER_LAB = 288 / 128
+AVERAGE_PRODUCTIVITY_PER_LAB = 0.75 * 16
+
 class DefaultDict(dict):
     def __init__(self, default_factory):
         self.default_factory = default_factory
@@ -39,11 +44,16 @@ def main():
         print("Could not create solver GLOP")
         return
 
-    with open('technologies.json') as f:
-        technologies = json.load(f)
+    with open('science.json') as f:
+        science_info = json.load(f)
+        science = science_info['science']
+        research_time = science_info['research_time']
 
     with open('recipes.json') as f:
         recipes = json.load(f)
+
+    research_time = research_time / (1 + AVERAGE_PRODUCTIVITY_PER_LAB)
+    vatbrain_cartridges = research_time * VATBRAIN_CARTRIDGES_PER_SECOND * NUMBER_OF_VATBRAINS_PER_LAB
 
     infinity = solver.infinity()
     variables = DefaultDict(lambda v: solver.NumVar(0, MAX_COST, v))
@@ -90,11 +100,13 @@ def main():
     print("Number of constraints =", solver.NumConstraints())
 
     objective = solver.Objective()
-    for name, count in technologies.items():
-        science_pack = variables[name]
-        objective.SetCoefficient(science_pack, count / 1000)
     for name, variable in variables.items():
         objective.SetCoefficient(variable, 0.001)
+    for name, count in science.items():
+        science_pack = variables[name]
+        objective.SetCoefficient(science_pack, count / (1 + AVERAGE_PRODUCTIVITY_PER_LAB) / 1000)
+    if VATBRAIN_CARTRIDGE:
+        objective.SetCoefficient(variables[VATBRAIN_CARTRIDGE], vatbrain_cartridges / 1000)
     objective.SetMaximization()
 
     # print(solver.ExportModelAsLpFormat(False).replace('\\', '').replace(',_', ','), sep='\n')
@@ -112,24 +124,27 @@ def main():
 
     print("Solution:")
     solution_values = {name: variable.solution_value() for name, variable in variables.items()}
-    for name in technologies:
+    for name in science:
         print(name, ' = ', solution_values[name])
+    if VATBRAIN_CARTRIDGE:
+        print('Vatbrain cost =', solution_values[VATBRAIN_CARTRIDGE])
+    print('Total objective cost =', objective.Value())
 
     flow_values = {recipe_name: constraints[recipe_name].dual_value() for recipe_name in recipes}
     
-    bloody_expensive = 0
+    bloody_expensive = set()
     for name, cost in solution_values.items():
         if cost == MAX_COST:
-            bloody_expensive += 1
+            bloody_expensive.add(name)
             # print('Bloody expensive: ', name)
-    print('Bloody expensive items: ', bloody_expensive)
+    print('Bloody expensive items: ', len(bloody_expensive))
 
-    small_potatoes = 0
+    zero_cost = set()
     for name, cost in solution_values.items():
         if cost == 0:
-            small_potatoes += 1
-            # print('Small potato: ', name)
-    print('Small potatoes: ', small_potatoes)
+            zero_cost.add(name)
+            # print('Zero cost: ', name)
+    print('Zero cost items: ', len(zero_cost))
 
     with open('solutions.json', 'w') as f:
         json.dump(solution_values, f, indent=1)
